@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Spotify Test</title>
+<style>
+body{background:#0a0a0a;color:#e8e8e8;font-family:sans-serif;padding:20px;font-size:14px}
+input,textarea{width:100%;background:#1c1c1c;border:1px solid #333;border-radius:8px;padding:10px;color:#e8e8e8;font-size:13px;outline:none;margin-bottom:10px}
+button{background:#1DB954;color:#000;border:none;padding:12px 20px;border-radius:100px;font-weight:700;font-size:14px;cursor:pointer;width:100%;margin-bottom:10px}
+pre{background:#1c1c1c;border:1px solid #333;border-radius:8px;padding:14px;overflow-x:auto;font-size:11px;white-space:pre-wrap;word-break:break-all;margin-top:10px}
+.label{font-size:11px;color:#777;margin-bottom:5px;text-transform:uppercase;letter-spacing:1px}
+.green{color:#1DB954}
+.red{color:#e44}
+</style>
+</head>
+<body>
+<h2 style="color:#1DB954;margin-bottom:20px">🎵 Spotify API Test</h2>
+
+<div class="label">Stap 1 — Log in</div>
+<button id="loginBtn">Inloggen met Spotify</button>
+
+<div id="tokenSection" style="display:none">
+  <div class="label">Token (automatisch ingevuld)</div>
+  <textarea id="tokenDisplay" rows="3" readonly></textarea>
+
+  <div class="label">Playlist ID om te testen</div>
+  <input id="playlistId" value="562yXHsB8IHe1SKWSo0Lcj" />
+
+<button id="testBtn">Test: haal tracks op</button>
+<button id="testMeBtn" style="background:#333;color:#e8e8e8">Test: wie ben ik?</button>
+<button id="testListBtn" style="background:#333;color:#e8e8e8">Test: mijn playlists</button>
+
+</div>
+
+<div id="result"></div>
+
+<script>
+const REDIRECT = window.location.href.split('?')[0].split('#')[0];
+const CLIENT_ID = localStorage.getItem('sp_cid_test') || '';
+
+function randStr(n){
+  const c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const a=new Uint8Array(n);crypto.getRandomValues(a);
+  return Array.from(a).map(b=>c[b%c.length]).join('');
+}
+async function pkce(v){
+  const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));
+  return btoa(String.fromCharCode(...new Uint8Array(h))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+
+async function login(){
+  const id = prompt('Plak je Spotify Client ID:');
+  if(!id) return;
+  localStorage.setItem('sp_cid_test', id);
+  const v=randStr(64);
+  const c=await pkce(v);
+  sessionStorage.setItem('tv',v);
+  sessionStorage.setItem('tid',id);
+  const p=new URLSearchParams({client_id:id,response_type:'code',redirect_uri:REDIRECT,scope:'user-read-private playlist-read-private playlist-read-collaborative',code_challenge_method:'S256',code_challenge:c});
+  window.location.href='https://accounts.spotify.com/authorize?'+p;
+}
+
+async function handleCallback(){
+  const params=new URLSearchParams(window.location.search);
+  const code=params.get('code');
+  if(!code) return;
+  window.history.replaceState({},'',window.location.pathname);
+  const v=sessionStorage.getItem('tv');
+  const id=sessionStorage.getItem('tid');
+  if(!v||!id){show('❌ Sessie verlopen','red');return;}
+  show('Token ophalen...','green');
+  try{
+    const r=await fetch('https://accounts.spotify.com/api/token',{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({grant_type:'authorization_code',code,redirect_uri:REDIRECT,client_id:id,code_verifier:v}).toString()
+    });
+    const d=await r.json();
+    if(d.access_token){
+      sessionStorage.setItem('tok',d.access_token);
+      document.getElementById('tokenDisplay').value=d.access_token;
+      document.getElementById('tokenSection').style.display='block';
+      show('✅ Token ontvangen! Scopes: '+d.scope,'green');
+    } else {
+      show('❌ '+JSON.stringify(d),'red');
+    }
+  }catch(e){show('❌ '+e.message,'red');}
+}
+
+async function apiCall(url){
+  const tok=sessionStorage.getItem('tok');
+  if(!tok){show('❌ Niet ingelogd','red');return;}
+  show('Laden...','green');
+  try{
+    const r=await fetch(url,{headers:{Authorization:'Bearer '+tok}});
+    const d=await r.json();
+    show('Status: '+r.status+'\n\n'+JSON.stringify(d,null,2), r.ok?'green':'red');
+  }catch(e){show('❌ '+e.message,'red');}
+}
+
+function show(msg,cls){
+  document.getElementById('result').innerHTML='<pre class="'+cls+'">'+msg+'</pre>';
+
+}
+
+document.getElementById(‘loginBtn’).addEventListener(‘click’,login);
+document.getElementById(‘testBtn’)?.addEventListener(‘click’,()=>{
+const id=document.getElementById(‘playlistId’).value.trim();
+apiCall(‘https://api.spotify.com/v1/playlists/’+id+’/tracks?limit=5’);
+});
+document.getElementById(‘testMeBtn’)?.addEventListener(‘click’,()=>apiCall(‘https://api.spotify.com/v1/me’));
+document.getElementById(‘testListBtn’)?.addEventListener(‘click’,()=>apiCall(‘https://api.spotify.com/v1/me/playlists?limit=5’));
+
+// Check if token already exists
+const existingTok = sessionStorage.getItem(‘tok’);
+if(existingTok){
+document.getElementById(‘tokenDisplay’).value=existingTok;
+document.getElementById(‘tokenSection’).style.display=‘block’;
+}
+
+handleCallback();
+</script>
+
+</body>
+</html>
