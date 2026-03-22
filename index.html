@@ -173,7 +173,7 @@ async function pkceChallenge(v){
 async function sf(tok,path,opts={}){
   const url=path.startsWith('https://')?path:'https://api.spotify.com/v1'+path;
   const r=await fetch(url,{...opts,headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json',...(opts.headers||{})}});
-  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+r.status);}
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error((e.error?.message||'HTTP '+r.status)+' ('+r.status+')');}
   if(r.status===204) return null;
   return r.json();
 }
@@ -280,7 +280,7 @@ async function analyze(){
   if(!S.selected) return;
   set({loading:true,loadingMsg:'Nummers ophalen…',progress:5,genreMap:{},tab:'genres'});
   try{
-    const raw=await fetchAll(S.token,'/playlists/'+S.selected.id+'/tracks?limit=100&fields=next,items(track(id,name,artists,album(images,name)))');
+    const raw=await fetchAll(S.token,'/playlists/'+S.selected.id+'/tracks?limit=100');
     const tracks=raw.map(i=>i.track).filter(t=>t&&t.id);
     set({loadingMsg:tracks.length+' nummers gevonden…',progress:20});
 
